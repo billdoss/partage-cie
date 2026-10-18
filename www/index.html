@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1F4FD8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Partage CIE">
+<meta name="description" content="Répartit la facture CIE entre locataires : kWh relevés au compteur, puis pourcentage du reste pour les autres.">
+<style>
+:root{color-scheme:light;padding:env(safe-area-inset-top,0px) 0 env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Partage CIE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Mise en page : une colonne de 560px, cartes sobres, un afficheur façon compteur pour le reste à répartir */
+:root{
+  --bg:#EDF0F2; --surface:#FFFFFF; --ink:#101B21; --muted:#56656F; --line:#D3DADF; --field:#F6F8F9;
+  --accent:#1F4FD8; --accent-ink:#FFFFFF; --accent-soft:#E2E9FB;
+  --teal:#0C8575; --owner:#D9961A;
+  --bad:#B7331F; --bad-soft:#FBE7E3; --warn:#7A5000; --warn-soft:#FFF1D6;
+  --lcd-bg:#0E171C; --lcd-fg:#FFC857; --lcd-dim:#A38C52;
+  --font-display:'Bricolage Grotesque',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E151A; --surface:#161F25; --ink:#E7EDF0; --muted:#93A3AD; --line:#27343C; --field:#0F181D;
+    --accent:#86A3FF; --accent-ink:#0B1426; --accent-soft:#1B2848;
+    --teal:#45C7B3; --owner:#E8B13E;
+    --bad:#FF907F; --bad-soft:#3A1E1A; --warn:#F0C265; --warn-soft:#3A2D12;
+    --lcd-bg:#070C0F; --lcd-fg:#FFC857; --lcd-dim:#8A7746;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E151A; --surface:#161F25; --ink:#E7EDF0; --muted:#93A3AD; --line:#27343C; --field:#0F181D;
+  --accent:#86A3FF; --accent-ink:#0B1426; --accent-soft:#1B2848;
+  --teal:#45C7B3; --owner:#E8B13E;
+  --bad:#FF907F; --bad-soft:#3A1E1A; --warn:#F0C265; --warn-soft:#3A2D12;
+  --lcd-bg:#070C0F; --lcd-fg:#FFC857; --lcd-dim:#8A7746;
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:var(--font-display); font-size:16px; line-height:1.45;
+  padding-block:20px 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1,h2,p{margin:0}
+.top{display:flex;flex-direction:column;gap:6px;padding-block:4px 2px}
+h1{font-size:2.1rem;font-weight:800;letter-spacing:-.025em;line-height:1.05;text-wrap:balance}
+.sub{color:var(--muted);max-width:42ch;text-wrap:pretty}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.head{display:flex;flex-direction:column;gap:2px}
+h2{font-size:1.1rem;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.head p{color:var(--muted);font-size:.92rem;text-wrap:pretty}
+
+.lbl{display:block;font-size:.7rem;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.field{min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:12px}
+
+input,select,textarea{
+  font:inherit;font-size:1rem;color:var(--ink);background:var(--field);
+  border:1px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;min-width:0;
+}
+input:focus-visible,select:focus-visible,textarea:focus-visible,.btn:focus-visible,.icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--font-mono);text-align:right;font-variant-numeric:tabular-nums}
+.sfx{display:flex;align-items:center;gap:8px;background:var(--field);border:1px solid var(--line);border-radius:8px;padding-right:12px;min-width:0}
+.sfx:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.sfx input{border:0;background:transparent;outline:0}
+.sfx span{font-family:var(--font-mono);font-size:.78rem;color:var(--muted);flex:none}
+.hint{font-size:.88rem;color:var(--muted)}
+.hint b{font-family:var(--font-mono);font-weight:600;color:var(--ink)}
+
+.rows{display:flex;flex-direction:column;gap:14px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 10px;align-items:center}
+.row+.row{border-top:1px solid var(--line);padding-top:14px}
+.row .sfx{grid-column:1;max-width:190px}
+.amt{grid-column:2;justify-self:end;font-family:var(--font-mono);font-weight:600;font-size:.95rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.icon-btn{justify-self:end;width:40px;height:40px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:1.4rem;line-height:1;cursor:pointer}
+.icon-btn:hover{color:var(--bad);border-color:var(--bad)}
+.empty{color:var(--muted);font-size:.92rem}
+
+.btn{font:inherit;font-weight:600;font-size:.95rem;min-height:44px;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.btn.add{width:100%;border-style:dashed;color:var(--accent);background:transparent}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{border-color:var(--bad);color:var(--bad)}
+.pct-total{font-family:var(--font-mono);font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.pct-total.over{color:var(--bad);font-weight:600}
+
+.lcd{background:var(--lcd-bg);color:var(--lcd-fg);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.lcd small{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lcd-dim)}
+.lcd-line{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.lcd-num{font-family:var(--font-mono);font-size:clamp(1.8rem,9vw,2.6rem);font-weight:500;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.lcd-unit{font-family:var(--font-mono);font-size:.85rem;color:var(--lcd-dim)}
+
+.ledger{margin:0;display:flex;flex-direction:column;gap:8px}
+.ledger>div{display:flex;align-items:baseline;gap:8px}
+.ledger dt{display:flex;flex:1;align-items:baseline;gap:8px;min-width:0;font-size:.95rem}
+.ledger dt::after{content:"";flex:1;min-width:12px;border-bottom:1px dotted var(--muted);transform:translateY(-3px)}
+.ledger dd{margin:0;font-family:var(--font-mono);font-size:.92rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ledger .sum dt,.ledger .sum dd{font-weight:700}
+.ledger .sum{border-top:1px solid var(--line);padding-top:8px}
+.ledger.boxed{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px}
+
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--line)}
+.bar span{display:block;height:100%;min-width:0}
+.seg-m{background:var(--accent)} .seg-p{background:var(--teal)} .seg-o{background:var(--owner)}
+@media (prefers-reduced-motion:no-preference){.bar span{transition:width .25s ease}}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.84rem;color:var(--muted);margin-top:-4px}
+.legend b{font-family:var(--font-mono);font-weight:600;color:var(--ink)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+
+.notes{display:flex;flex-direction:column;gap:8px}
+.note{border-radius:8px;padding:10px 12px;font-size:.9rem;text-wrap:pretty}
+.note.info{background:var(--accent-soft);color:var(--accent)}
+.note.warn{background:var(--warn-soft);color:var(--warn)}
+.note.bad{background:var(--bad-soft);color:var(--bad)}
+
+.pay{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.pay li{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-block:10px;border-top:1px solid var(--line)}
+.pay li:first-child{border-top:0}
+.pay .who{display:flex;flex-direction:column;min-width:0}
+.pay .nm{font-weight:600;overflow-wrap:anywhere}
+.pay .dt{font-family:var(--font-mono);font-size:.78rem;color:var(--muted)}
+.pay .am{font-family:var(--font-mono);font-size:1.02rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pay .owner{border-top:1px dashed var(--muted)}
+.pay .total{border-top:2px solid var(--ink)}
+.pay .total .nm,.pay .total .am{font-weight:800}
+
+.sumtxt{font-family:var(--font-mono);font-size:.84rem;line-height:1.55;min-height:9.5rem;resize:vertical}
+.copy-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.copy-msg{font-size:.88rem;color:var(--muted)}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.actions .btn{flex:1 1 150px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Partage CIE</h1>
+    <p class="sub">Répartissez la facture d'électricité entre vos locataires, au compteur ou au pourcentage.</p>
+  </header>
+
+  <p class="note info" id="example-note" hidden>Ces valeurs sont un exemple. Remplacez-les par celles de votre facture.</p>
+
+  <section class="card" aria-labelledby="t-bill">
+    <div class="head">
+      <h2 id="t-bill">La facture</h2>
+      <p>Reprenez les chiffres de la facture CIE du mois.</p>
+    </div>
+    <div class="field">
+      <label class="lbl" for="label">Période</label>
+      <input id="label" type="text" placeholder="Ex. Septembre 2026" autocomplete="off">
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label class="lbl" for="bill">Montant total</label>
+        <div class="sfx"><input id="bill" class="num" type="text" inputmode="decimal" placeholder="0" autocomplete="off"><span>FCFA</span></div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="kwh">kWh facturés</label>
+        <div class="sfx"><input id="kwh" class="num" type="text" inputmode="decimal" placeholder="0" autocomplete="off"><span>kWh</span></div>
+      </div>
+    </div>
+    <p class="hint" id="price-hint"></p>
+    <div class="grid2">
+      <div class="field">
+        <label class="lbl" for="price">Prix du kWh (facultatif)</label>
+        <div class="sfx"><input id="price" class="num" type="text" inputmode="decimal" placeholder="Auto" autocomplete="off"><span>FCFA</span></div>
+      </div>
+      <div class="field">
+        <label class="lbl" for="round">Arrondir à</label>
+        <select id="round">
+          <option value="1">1 FCFA (exact)</option>
+          <option value="5">5 FCFA</option>
+          <option value="10">10 FCFA</option>
+          <option value="25">25 FCFA</option>
+          <option value="50">50 FCFA</option>
+          <option value="100">100 FCFA</option>
+        </select>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="t-meter">
+    <div class="head">
+      <h2 id="t-meter">Locataires avec compteur</h2>
+      <p>Chacun paie ses kWh au prix moyen de la facture.</p>
+    </div>
+    <div class="rows" id="m-rows"></div>
+    <button class="btn add" type="button" id="m-add">+ Ajouter un locataire avec compteur</button>
+  </section>
+
+  <section class="card" aria-labelledby="t-pct">
+    <div class="head">
+      <h2 id="t-pct">Locataires au pourcentage</h2>
+      <p>Chacun paie une part du reste à payer, une fois les compteurs déduits.</p>
+    </div>
+    <dl class="ledger boxed" id="pct-ledger"></dl>
+    <div class="rows" id="s-rows"></div>
+    <p class="pct-total" id="pct-total"></p>
+    <button class="btn add" type="button" id="s-add">+ Ajouter un locataire au pourcentage</button>
+  </section>
+
+  <section class="card" aria-labelledby="t-res">
+    <div class="head"><h2 id="t-res">Résultat</h2></div>
+    <div class="lcd">
+      <small>Reste à répartir</small>
+      <div class="lcd-line"><output class="lcd-num" id="lcd-val">—</output><span class="lcd-unit">FCFA</span></div>
+    </div>
+    <dl class="ledger" id="ledger"></dl>
+    <div id="bar-wrap" hidden>
+      <div class="bar" id="bar" role="img" aria-label="">
+        <span class="seg-m" id="seg-m"></span><span class="seg-p" id="seg-p"></span><span class="seg-o" id="seg-o"></span>
+      </div>
+    </div>
+    <div class="legend" id="legend" hidden></div>
+    <div class="notes" id="notes" role="status"></div>
+    <p class="empty" id="pay-empty">Les montants à payer s'affichent ici dès que la facture est complète.</p>
+    <ul class="pay" id="pay" hidden></ul>
+  </section>
+
+  <section class="card" aria-labelledby="t-msg">
+    <div class="head">
+      <h2 id="t-msg">Message à envoyer</h2>
+      <p>Copiez le détail et collez-le dans WhatsApp ou un SMS.</p>
+    </div>
+    <textarea class="sumtxt" id="summary" readonly aria-label="Résumé à copier"></textarea>
+    <div class="copy-row">
+      <button class="btn primary" type="button" id="copy">Copier le résumé</button>
+      <span class="copy-msg" id="copy-msg" role="status"></span>
+    </div>
+  </section>
+
+  <div class="actions">
+    <button class="btn" type="button" id="new-month">Nouveau mois</button>
+    <button class="btn" type="button" id="reset">Tout effacer</button>
+  </div>
+  <p class="hint">« Nouveau mois » vide la facture et les relevés, et garde vos locataires et leurs pourcentages. Vos données restent sur cet appareil.</p>
+</div>
+
+<script>
+(function(){
+  var KEY='partage-cie-v1';
+  var uid=1; function nid(){return 'i'+(uid++);}
+  var nf=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0});
+  var nf2=new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2});
+  var NB=' ';
+  function fix(s){return s.replace(/[  ]/g,NB);}
+  function plain(n){return isFinite(n)?fix(nf.format(n)):'—';}
+  function money(n){return isFinite(n)?plain(n)+NB+'FCFA':'—';}
+  function dec(n){return isFinite(n)?fix(nf2.format(n)):'—';}
+  function num(s){
+    if(s==null) return NaN;
+    s=String(s).replace(/[\s  ]/g,'').replace(',','.');
+    if(s==='') return NaN;
+    var n=Number(s); return isFinite(n)?n:NaN;
+  }
+  function $(id){return document.getElementById(id);}
+  function h(tag,props){
+    var e=document.createElement(tag), k;
+    props=props||{};
+    for(k in props){
+      var v=props[k];
+      if(k==='class') e.className=v;
+      else if(k==='text') e.textContent=v;
+      else if(k.slice(0,2)==='on') e.addEventListener(k.slice(2),v);
+      else if(v!==false && v!=null) e.setAttribute(k,v);
+    }
+    for(var i=2;i<arguments.length;i++){ if(arguments[i]!=null) e.append(arguments[i]); }
+    return e;
+  }
+
+  function example(){
+    return {label:'',bill:'62400',kwh:'600',price:'',round:'5',example:true,
+      metered:[{id:nid(),name:'Appartement A',kwh:'180'},{id:nid(),name:'Studio B',kwh:'95'}],
+      shared:[{id:nid(),name:'Chambre 1',pct:'30'},{id:nid(),name:'Chambre 2',pct:'30'},{id:nid(),name:'Chambre 3',pct:'20'}]};
+  }
+  function blank(){
+    return {label:'',bill:'',kwh:'',price:'',round:'5',example:false,
+      metered:[{id:nid(),name:'',kwh:''}],shared:[{id:nid(),name:'',pct:''}]};
+  }
+  function load(){
+    try{
+      var raw=localStorage.getItem(KEY);
+      if(raw){
+        var s=JSON.parse(raw);
+        if(s && Array.isArray(s.metered) && Array.isArray(s.shared)){
+          s.metered.forEach(function(t){t.id=nid();});
+          s.shared.forEach(function(t){t.id=nid();});
+          s.round=String(s.round||'5');
+          return s;
+        }
+      }
+    }catch(e){}
+    return example();
+  }
+  function save(){ try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){} }
+
+  var state=load();
+  var refs={};
+
+  function renderRows(){
+    refs={};
+    fill('m',$('m-rows'),state.metered);
+    fill('s',$('s-rows'),state.shared);
+  }
+  function fill(kind,box,list){
+    box.replaceChildren();
+    if(!list.length){ box.append(h('p',{class:'empty',text:'Aucun locataire. Ajoutez-en un ci-dessous.'})); return; }
+    list.forEach(function(t){ box.append(row(kind,t,list)); });
+  }
+  function row(kind,t,list){
+    var p=kind;
+    var del=h('button',{class:'icon-btn',type:'button',id:p+'-del-'+t.id,'aria-label':'Retirer ce locataire',text:'×',
+      onclick:function(){var i=list.indexOf(t); if(i>-1) list.splice(i,1); changed(true);}});
+    var name=h('input',{id:p+'-name-'+t.id,type:'text',placeholder:'Nom (ex. Studio B)',value:t.name,'aria-label':'Nom du locataire',autocomplete:'off',
+      oninput:function(e){t.name=e.target.value; changed();}});
+    var val=h('input',{id:p+'-val-'+t.id,type:'text',inputmode:'decimal',class:'num',placeholder:'0',
+      value:kind==='m'?t.kwh:t.pct,'aria-label':kind==='m'?'Consommation en kWh':'Pourcentage du reste',autocomplete:'off',
+      oninput:function(e){ if(kind==='m') t.kwh=e.target.value; else t.pct=e.target.value; changed(); }});
+    var sfx=h('div',{class:'sfx'},val,h('span',{text:kind==='m'?'kWh':'%'}));
+    var amt=h('output',{class:'amt',id:p+'-amt-'+t.id,text:'—'});
+    refs[t.id]=amt;
+    return h('div',{class:'row'},name,del,sfx,amt);
+  }
+
+  function calc(){
+    var bill=num(state.bill), kwhT=num(state.kwh), po=num(state.price);
+    var unit=Number(state.round)||1;
+    function rnd(x){return Math.round(x/unit)*unit;}
+    var price=po>0?po:(bill>0&&kwhT>0?bill/kwhT:NaN);
+    var m=state.metered.map(function(t){
+      var k=num(t.kwh), has=isFinite(k);
+      var raw=has?(k===0?0:(isFinite(price)?k*price:NaN)):NaN;
+      return {t:t,k:has?k:0,has:has,raw:raw,amt:isFinite(raw)?rnd(raw):NaN};
+    });
+    var needPrice=m.some(function(x){return x.has&&x.k>0;})&&!isFinite(price);
+    var mRaw=m.reduce(function(a,x){return a+(isFinite(x.raw)?x.raw:0);},0);
+    var mAmt=m.reduce(function(a,x){return a+(isFinite(x.amt)?x.amt:0);},0);
+    var kwhMetered=m.reduce(function(a,x){return a+x.k;},0);
+    var rest=(isFinite(bill)&&!needPrice)?bill-mAmt:NaN;
+    var s=state.shared.map(function(t){
+      var p=num(t.pct), has=isFinite(p);
+      var raw=(has&&isFinite(rest)&&rest>=0)?rest*p/100:NaN;
+      return {t:t,p:has?p:0,has:has,raw:raw,amt:isFinite(raw)?rnd(raw):NaN};
+    });
+    var pctSum=s.reduce(function(a,x){return a+x.p;},0);
+    var sAmt=s.reduce(function(a,x){return a+(isFinite(x.amt)?x.amt:0);},0);
+    var ok=bill>0&&!needPrice&&isFinite(rest)&&rest>=0;
+    var owner=ok?bill-mAmt-sAmt:NaN;
+    return {bill:bill,kwhT:kwhT,po:po,price:price,m:m,s:s,needPrice:needPrice,mRaw:mRaw,mAmt:mAmt,
+      kwhMetered:kwhMetered,rest:rest,pctSum:pctSum,sAmt:sAmt,owner:owner,ok:ok};
+  }
+
+  function nm(t){return (t.name||'').trim()||'Locataire sans nom';}
+
+  function update(){
+    var r=calc();
+    $('example-note').hidden=!state.example;
+
+    // aide sur le prix du kWh
+    var ph=$('price-hint');
+    ph.replaceChildren();
+    if(r.po>0){ ph.append('Prix du kWh saisi : ',h('b',{text:dec(r.po)+NB+'FCFA'}),'.'); }
+    else if(isFinite(r.price)){ ph.append('Prix moyen du kWh : ',h('b',{text:dec(r.price)+NB+'FCFA'}),' (montant ÷ kWh facturés).'); }
+    else { ph.append('Indiquez le montant et les kWh facturés pour obtenir le prix moyen du kWh.'); }
+
+    // montants par ligne
+    r.m.forEach(function(x){var o=refs[x.t.id]; if(o) o.textContent=isFinite(x.amt)?money(x.amt):'—';});
+    r.s.forEach(function(x){var o=refs[x.t.id]; if(o) o.textContent=isFinite(x.amt)?money(x.amt):'—';});
+
+    // total des pourcentages
+    var pt=$('pct-total');
+    if(r.s.length){
+      pt.textContent='Total : '+dec(r.pctSum)+' % du reste'+(r.pctSum<=100?' · '+dec(100-r.pctSum)+' % à votre charge':'');
+    } else pt.textContent='';
+    pt.classList.toggle('over',r.pctSum>100);
+
+    // afficheur
+    $('lcd-val').textContent=isFinite(r.rest)?plain(r.rest):'—';
+
+    // registre
+    var L=$('ledger'); L.replaceChildren();
+    function line(label,value,cls){
+      var d=h('div',cls?{class:cls}:{},h('dt',{text:label}),h('dd',{text:value}));
+      L.append(d);
+    }
+    line('Facture CIE',money(r.bill));
+    if(r.kwhT>0) line('kWh facturés',dec(r.kwhT)+NB+'kWh');
+    if(isFinite(r.price)) line('Prix moyen du kWh',dec(r.price)+NB+'FCFA');
+    line('Compteurs ('+dec(r.kwhMetered)+NB+'kWh)',r.needPrice?'—':'−'+NB+money(r.mAmt));
+    if(r.kwhT>0) line('kWh sans compteur',dec(r.kwhT-r.kwhMetered)+NB+'kWh');
+    line('Reste à répartir',money(r.rest),'sum');
+
+    // reste à répartir, rappelé dans la section des pourcentages
+    var PL=$('pct-ledger'); PL.replaceChildren();
+    [['Facture CIE',money(r.bill),''],
+     ['Moins les locataires avec compteur',r.needPrice?'—':'−'+NB+money(r.mAmt),''],
+     ['Reste à répartir',money(r.rest),'sum']].forEach(function(a){
+      PL.append(h('div',a[2]?{class:a[2]}:{},h('dt',{text:a[0]}),h('dd',{text:a[1]})));
+    });
+
+    // remarques
+    var notes=[];
+    if(!(r.bill>0)) notes.push(['info','Saisissez le montant de la facture pour lancer le calcul.']);
+    if(r.needPrice) notes.push(['bad','Il manque les kWh facturés, donc le prix du kWh est inconnu. Saisissez-les, ou indiquez le prix à la main.']);
+    if(isFinite(r.rest)&&r.rest<0) notes.push(['bad','Les compteurs coûtent plus que la facture. Vérifiez les relevés ou le prix du kWh.']);
+    if(r.kwhT>0&&r.kwhMetered>r.kwhT) notes.push(['warn','Les relevés ('+dec(r.kwhMetered)+' kWh) dépassent les kWh de la facture ('+dec(r.kwhT)+' kWh).']);
+    if(r.pctSum>100) notes.push(['bad','Les pourcentages totalisent '+dec(r.pctSum)+' %. Ils ne doivent pas dépasser 100 %.']);
+    var N=$('notes'); N.replaceChildren();
+    notes.forEach(function(n){N.append(h('p',{class:'note '+n[0],text:n[1]}));});
+
+    // barre et légende
+    var showBar=r.ok&&r.bill>0;
+    $('bar-wrap').hidden=!showBar; $('legend').hidden=!showBar;
+    if(showBar){
+      var pm=Math.max(0,r.mAmt/r.bill*100), ps=Math.max(0,r.sAmt/r.bill*100), po2=Math.max(0,r.owner/r.bill*100);
+      $('seg-m').style.width=pm+'%'; $('seg-p').style.width=ps+'%'; $('seg-o').style.width=po2+'%';
+      var rp=function(x){return plain(Math.round(x))+' %';};
+      $('bar').setAttribute('aria-label','Part de la facture : compteurs '+rp(pm)+', pourcentages '+rp(ps)+', à votre charge '+rp(po2));
+      var lg=$('legend'); lg.replaceChildren();
+      [['seg-m','Compteurs',pm],['seg-p','Pourcentages',ps],['seg-o','Vous',po2]].forEach(function(a){
+        lg.append(h('span',{},h('i',{class:'dot '+a[0]}),a[1]+' ',h('b',{text:rp(a[2])})));
+      });
+    }
+
+    // montants à payer
+    var P=$('pay'); P.replaceChildren();
+    $('pay-empty').hidden=r.ok; P.hidden=!r.ok;
+    if(r.ok){
+      function li(cls,name,detail,amount){
+        P.append(h('li',cls?{class:cls}:{},
+          h('div',{class:'who'},h('span',{class:'nm',text:name}),detail?h('span',{class:'dt',text:detail}):null),
+          h('strong',{class:'am',text:amount})));
+      }
+      r.m.forEach(function(x){
+        li('',nm(x.t),dec(x.k)+' kWh × '+dec(r.price)+' FCFA',isFinite(x.amt)?money(x.amt):'—');
+      });
+      r.s.forEach(function(x){
+        li('',nm(x.t),dec(x.p)+' % du reste',isFinite(x.amt)?money(x.amt):'—');
+      });
+      li('owner','À votre charge',r.pctSum<=100?dec(100-r.pctSum)+' % du reste, arrondis inclus':'arrondis inclus',money(r.owner));
+      li('total','Total facture','',money(r.bill));
+    }
+
+    // résumé à copier
+    $('summary').value=summary(r);
+  }
+
+  function summary(r){
+    var L=[];
+    var lab=(state.label||'').trim();
+    L.push('Facture CIE'+(lab?' · '+lab:''));
+    L.push('Total : '+money(r.bill));
+    if(isFinite(r.price)) L.push('Prix moyen du kWh : '+dec(r.price)+NB+'FCFA');
+    L.push('');
+    if(!r.ok){ L.push('Le détail apparaîtra ici une fois la facture complète.'); return L.join('\n'); }
+    r.m.forEach(function(x){ if(isFinite(x.amt)) L.push(nm(x.t)+' : '+dec(x.k)+NB+'kWh → '+money(x.amt)); });
+    r.s.forEach(function(x){ if(isFinite(x.amt)) L.push(nm(x.t)+' : '+dec(x.p)+' % du reste → '+money(x.amt)); });
+    return L.join('\n');
+  }
+
+  function changed(structural){
+    state.example=false;
+    if(structural) renderRows();
+    update(); save();
+  }
+
+  function syncFields(){
+    $('label').value=state.label||''; $('bill').value=state.bill||''; $('kwh').value=state.kwh||'';
+    $('price').value=state.price||''; $('round').value=state.round||'5';
+  }
+  ['label','bill','kwh','price'].forEach(function(k){
+    $(k).addEventListener('input',function(e){state[k]=e.target.value; changed();});
+  });
+  $('round').addEventListener('change',function(e){state.round=e.target.value; changed();});
+  $('m-add').addEventListener('click',function(){
+    var t={id:nid(),name:'',kwh:''}; state.metered.push(t); changed(true);
+    var i=$('m-name-'+t.id); if(i) i.focus();
+  });
+  $('s-add').addEventListener('click',function(){
+    var t={id:nid(),name:'',pct:''}; state.shared.push(t); changed(true);
+    var i=$('s-name-'+t.id); if(i) i.focus();
+  });
+
+  $('new-month').addEventListener('click',function(){
+    state.label=''; state.bill=''; state.kwh=''; state.price='';
+    state.metered.forEach(function(t){t.kwh='';});
+    syncFields(); changed(true);
+  });
+
+  var armed=null, resetBtn=$('reset');
+  function disarm(){ if(armed){clearTimeout(armed); armed=null;} resetBtn.textContent='Tout effacer'; resetBtn.classList.remove('danger'); }
+  resetBtn.addEventListener('click',function(){
+    if(!armed){
+      resetBtn.textContent='Confirmer : tout effacer'; resetBtn.classList.add('danger');
+      armed=setTimeout(disarm,4000);
+    } else {
+      disarm(); state=blank(); syncFields(); changed(true);
+    }
+  });
+
+  var msgTimer=null;
+  function say(t){ var m=$('copy-msg'); m.textContent=t; clearTimeout(msgTimer); msgTimer=setTimeout(function(){m.textContent='';},4000); }
+  $('copy').addEventListener('click',function(){
+    var ta=$('summary');
+    try{
+      navigator.clipboard.writeText(ta.value).then(function(){say('Résumé copié.');},function(){fallback(ta);});
+    }catch(e){ fallback(ta); }
+  });
+  function fallback(ta){ ta.focus(); ta.select(); say('Copie impossible ici. Le texte est sélectionné, copiez-le à la main.'); }
+
+  syncFields(); renderRows(); update();
+})();
+</script>
+<script>
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){});});
+}
+</script>
+</body>
+</html>

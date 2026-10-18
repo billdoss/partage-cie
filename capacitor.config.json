@@ -1,0 +1,9 @@
+{
+  "appId": "com.partagecie.app",
+  "appName": "Partage CIE",
+  "webDir": "www",
+  "backgroundColor": "#EDF0F2",
+  "android": {
+    "allowMixedContent": false
+  }
+}
